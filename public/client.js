@@ -40,9 +40,11 @@ async function loadRooms() {
 async function createRoom() {
 
   const name = document.getElementById('roomName').value;
-  const password = document.getElementById('privateCheck').checked
-    ? document.getElementById('roomPassword').value
-    : '';
+
+  const password =
+    document.getElementById('privateCheck').checked
+      ? document.getElementById('roomPassword').value
+      : '';
 
   const res = await fetch('/create-room', {
     method: 'POST',
@@ -59,16 +61,54 @@ async function createRoom() {
   const room = await res.json();
 
   loadRooms();
+
   joinRoom(room.id);
 }
 
-function joinRoom(roomId) {
+async function joinRoom(roomId) {
+
+  const roomsRes = await fetch('/rooms');
+  const rooms = await roomsRes.json();
+
+  const room = rooms.find(r => r.id == roomId);
+
+  if (!room) {
+    alert('방이 존재하지 않습니다.');
+    return;
+  }
+
+  if (room.password) {
+
+    const inputPassword =
+      prompt('비밀번호를 입력하세요');
+
+    if (inputPassword === null) return;
+
+    const verifyRes = await fetch('/verify-room', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        roomId,
+        password: inputPassword
+      })
+    });
+
+    const verify = await verifyRes.json();
+
+    if (!verify.success) {
+      alert(verify.message);
+      return;
+    }
+  }
 
   currentRoom = roomId;
 
   localStorage.setItem('lastRoom', roomId);
 
-  document.getElementById('currentRoom').innerText = `방: ${roomId}`;
+  document.getElementById('currentRoom').innerText =
+    `방: ${roomId}`;
 
   socket.emit('joinRoom', {
     roomId,
@@ -79,9 +119,13 @@ function joinRoom(roomId) {
 function appendMessage(text) {
 
   const div = document.createElement('div');
+
   div.innerHTML = text;
 
   document.getElementById('chat').appendChild(div);
+
+  document.getElementById('chat').scrollTop =
+    document.getElementById('chat').scrollHeight;
 }
 
 function sendMessage() {
@@ -99,7 +143,8 @@ function sendMessage() {
   input.value = '';
 }
 
-document.getElementById('message').addEventListener('keydown', (e) => {
+document.getElementById('message')
+.addEventListener('keydown', (e) => {
 
   if (e.key === 'Enter') {
     sendMessage();
@@ -108,9 +153,19 @@ document.getElementById('message').addEventListener('keydown', (e) => {
 
 socket.on('chatMessage', (data) => {
 
-  appendMessage(`
-    <b>${data.nickname}</b>: ${data.message}
-  `);
+  if (data.image) {
+
+    appendMessage(`
+      <b>${data.nickname}</b><br>
+      <img src="${data.image}" class="preview">
+    `);
+
+  } else {
+
+    appendMessage(`
+      <b>${data.nickname}</b>: ${data.message}
+    `);
+  }
 });
 
 socket.on('systemMessage', (data) => {
@@ -120,7 +175,8 @@ socket.on('systemMessage', (data) => {
 
 socket.on('userList', (users) => {
 
-  document.getElementById('users').innerHTML = users.join('<br>');
+  document.getElementById('users').innerHTML =
+    users.join('<br>');
 });
 
 socket.on('loadMessages', (messages) => {
@@ -130,6 +186,7 @@ socket.on('loadMessages', (messages) => {
   messages.forEach(msg => {
 
     if (msg.image) {
+
       appendMessage(`
         <b>${msg.nickname}</b><br>
         <img src="${msg.image}" class="preview">
@@ -146,9 +203,13 @@ socket.on('loadMessages', (messages) => {
 
 async function uploadFile() {
 
-  const file = document.getElementById('fileInput').files[0];
+  const file =
+    document.getElementById('fileInput').files[0];
+
+  if (!file) return;
 
   const form = new FormData();
+
   form.append('file', file);
 
   const res = await fetch('/upload', {
@@ -170,7 +231,10 @@ loadRooms();
 const lastRoom = localStorage.getItem('lastRoom');
 
 if (lastRoom) {
+
   setTimeout(() => {
+
     joinRoom(lastRoom);
+
   }, 500);
 }
