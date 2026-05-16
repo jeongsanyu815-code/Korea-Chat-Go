@@ -58,7 +58,8 @@ app.get('/rooms', (req, res) => {
   res.json(loadRooms());
 });
 
-app.post('/create-room', express.json(), (req, res) => {
+app.post('/create-room', (req, res) => {
+
   const rooms = loadRooms();
 
   const room = {
@@ -69,12 +70,47 @@ app.post('/create-room', express.json(), (req, res) => {
   };
 
   rooms.push(room);
+
   saveRooms(rooms);
 
   res.json(room);
 });
 
+app.post('/verify-room', (req, res) => {
+
+  const rooms = loadRooms();
+
+  const room = rooms.find(
+    r => r.id == req.body.roomId
+  );
+
+  if (!room) {
+    return res.json({
+      success: false,
+      message: '방이 존재하지 않습니다.'
+    });
+  }
+
+  if (!room.password) {
+    return res.json({
+      success: true
+    });
+  }
+
+  if (room.password === req.body.password) {
+    return res.json({
+      success: true
+    });
+  }
+
+  res.json({
+    success: false,
+    message: '비밀번호가 틀렸습니다.'
+  });
+});
+
 app.post('/upload', upload.single('file'), (req, res) => {
+
   res.json({
     url: '/uploads/' + req.file.filename,
     type: req.file.mimetype
@@ -96,7 +132,20 @@ io.on('connection', (socket) => {
       roomUsers[roomId] = [];
     }
 
-    roomUsers[roomId].push(nickname);
+    roomUsers[roomId] = roomUsers[roomId].filter(
+      user => user.socketId !== socket.id
+    );
+
+    roomUsers[roomId].push({
+      socketId: socket.id,
+      nickname
+    });
+
+    const uniqueUsers = [
+      ...new Set(
+        roomUsers[roomId].map(user => user.nickname)
+      )
+    ];
 
     const messages = loadMessages();
 
@@ -104,7 +153,7 @@ io.on('connection', (socket) => {
       text: `${nickname}님이 입장했습니다.`
     });
 
-    io.to(roomId).emit('userList', roomUsers[roomId]);
+    io.to(roomId).emit('userList', uniqueUsers);
 
     socket.emit('loadMessages', messages[roomId] || []);
   });
@@ -131,14 +180,20 @@ io.on('connection', (socket) => {
     if (!roomId || !roomUsers[roomId]) return;
 
     roomUsers[roomId] = roomUsers[roomId].filter(
-      u => u !== socket.nickname
+      user => user.socketId !== socket.id
     );
+
+    const uniqueUsers = [
+      ...new Set(
+        roomUsers[roomId].map(user => user.nickname)
+      )
+    ];
 
     io.to(roomId).emit('systemMessage', {
       text: `${socket.nickname}님이 퇴장했습니다.`
     });
 
-    io.to(roomId).emit('userList', roomUsers[roomId]);
+    io.to(roomId).emit('userList', uniqueUsers);
   });
 });
 
